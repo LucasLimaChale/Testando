@@ -1,0 +1,58 @@
+require('dotenv').config();
+
+const express = require('express');
+const cors = require('cors');
+const morgan = require('morgan');
+
+const authRoutes    = require('./routes/auth');
+const videoRoutes   = require('./routes/videos');
+const clientRoutes  = require('./routes/clients');
+const webhookRoutes = require('./routes/webhooks');
+const { startCleanupJob } = require('./jobs/cleanup');
+
+const app = express();
+
+// ─── Middleware ──────────────────────────────────────────────────────────────
+
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+  : true; // true = qualquer origem (desenvolvimento)
+
+app.use(cors({ origin: allowedOrigins, credentials: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+
+// ─── Health ──────────────────────────────────────────────────────────────────
+
+app.get('/health', (_req, res) =>
+  res.json({ status: 'ok', timestamp: new Date().toISOString() })
+);
+
+// ─── Rotas ───────────────────────────────────────────────────────────────────
+
+app.use('/auth',    authRoutes);
+app.use('/videos',  videoRoutes);
+app.use('/clients', clientRoutes);
+app.use('/webhook', webhookRoutes);
+
+// ─── 404 ─────────────────────────────────────────────────────────────────────
+
+app.use((_req, res) => res.status(404).json({ error: 'Rota não encontrada' }));
+
+// ─── Error handler ───────────────────────────────────────────────────────────
+
+app.use((err, _req, res, _next) => {
+  console.error(err);
+  res.status(500).json({ error: 'Erro interno do servidor' });
+});
+
+// ─── Start ───────────────────────────────────────────────────────────────────
+
+const PORT = process.env.PORT || 3001;
+
+app.listen(PORT, () => {
+  console.log(`Backend rodando na porta ${PORT} [${process.env.NODE_ENV || 'development'}]`);
+  startCleanupJob();
+});
+
+module.exports = app;

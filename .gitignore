@@ -1,0 +1,23 @@
+# Variáveis de ambiente (NUNCA subir para o GitHub)
+.env
+.env.local
+.env.production
+
+# Dependências
+node_modules/
+**/node_modules/
+
+# Next.js build
+frontend/.next/
+frontend/out/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Docker volumes
+postgres_data/
+
+# OS
+.DS_Store
+Thumbs.db
