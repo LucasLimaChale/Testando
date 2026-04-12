@@ -1,5 +1,4 @@
-const { S3Client, DeleteObjectsCommand } = require('@aws-sdk/client-s3');
-const { Upload } = require('@aws-sdk/lib-storage');
+const { S3Client, PutObjectCommand, DeleteObjectsCommand } = require('@aws-sdk/client-s3');
 
 const R2 = new S3Client({
   region: 'auto',
@@ -10,31 +9,25 @@ const R2 = new S3Client({
   },
 });
 
-const BUCKET = process.env.CF_R2_BUCKET || 'videos-approval';
-const PUBLIC_URL = process.env.CF_R2_PUBLIC_URL; // ex: https://pub-xxx.r2.dev
+const BUCKET     = process.env.CF_R2_BUCKET      || 'videos-approval';
+const PUBLIC_URL = process.env.CF_R2_PUBLIC_URL;
 
 async function uploadFile(buffer, key, contentType) {
-  const uploader = new Upload({
-    client: R2,
-    params: {
-      Bucket: BUCKET,
-      Key: key,
-      Body: buffer,
-      ContentType: contentType,
-    },
-  });
-  await uploader.done();
+  await R2.send(new PutObjectCommand({
+    Bucket:      BUCKET,
+    Key:         key,
+    Body:        buffer,
+    ContentType: contentType,
+  }));
   return `${PUBLIC_URL}/${key}`;
 }
 
 async function deleteFiles(keys) {
-  if (!keys.length) return;
-  await R2.send(
-    new DeleteObjectsCommand({
-      Bucket: BUCKET,
-      Delete: { Objects: keys.map(k => ({ Key: k })) },
-    })
-  );
+  if (!keys || !keys.length) return;
+  await R2.send(new DeleteObjectsCommand({
+    Bucket: BUCKET,
+    Delete: { Objects: keys.map(k => ({ Key: k })) },
+  }));
 }
 
 module.exports = { uploadFile, deleteFiles };
