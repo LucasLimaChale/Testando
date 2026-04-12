@@ -65,6 +65,9 @@ export const api = {
   deleteColaborador: (empresaId, id) =>
     request(`/empresas/${empresaId}/colaboradores/${id}`, { method: 'DELETE' }),
 
+  // Stats (admin)
+  getStats: () => request('/stats'),
+
   // Videos
   getVideos: (params = {}) => {
     const qs = new URLSearchParams(params).toString();

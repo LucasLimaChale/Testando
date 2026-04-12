@@ -117,7 +117,7 @@ export default function DashboardPage() {
         {/* Header */}
         <div className="px-6 py-6 flex items-center justify-between border-b border-slate-200 bg-white">
           <div>
-            <h1 className="text-xl font-bold text-slate-900">Kanban</h1>
+            <h1 className="text-xl font-bold text-slate-900">Lista de Vídeos</h1>
             <p className="text-sm text-slate-500 mt-0.5">Arraste os cards para mover entre etapas</p>
           </div>
           {['admin', 'editor'].includes(user?.tipo) && (

@@ -8,6 +8,7 @@ const authRoutes     = require('./routes/auth');
 const videoRoutes    = require('./routes/videos');
 const clientRoutes   = require('./routes/clients');
 const empresaRoutes  = require('./routes/empresas');
+const statsRoutes    = require('./routes/stats');
 const webhookRoutes  = require('./routes/webhooks');
 const { startCleanupJob } = require('./jobs/cleanup');
 
@@ -33,6 +34,7 @@ app.use('/auth',      authRoutes);
 app.use('/videos',   videoRoutes);
 app.use('/clients',  clientRoutes);
 app.use('/empresas', empresaRoutes);
+app.use('/stats',    statsRoutes);
 app.use('/webhook',  webhookRoutes);
 
 app.use((_req, res) => res.status(404).json({ error: 'Rota não encontrada' }));
