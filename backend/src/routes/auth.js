@@ -169,7 +169,7 @@ router.get('/logs', authenticate, async (req, res) => {
     const { rows } = await pool.query(
       `SELECT l.id,
               l.ip,
-              l.data_hora_login AT TIME ZONE 'America/Sao_Paulo' AS data_hora_login,
+              l.data_hora_login AS data_hora_login,
               u.nome AS usuario,
               u.email,
               u.tipo

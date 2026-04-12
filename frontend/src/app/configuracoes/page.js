@@ -313,9 +313,11 @@ export default function ConfiguracoesPage() {
                             <td className="px-5 py-3.5">
                               <span className={`badge ${ROLE_CLS[l.tipo] || 'badge-gray'} capitalize`}>{l.tipo}</span>
                             </td>
-                            <td className="px-5 py-3.5 text-slate-600">{dt.toLocaleDateString('pt-BR')}</td>
+                            <td className="px-5 py-3.5 text-slate-600">
+                              {dt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
+                            </td>
                             <td className="px-5 py-3.5 text-slate-600 font-mono text-xs">
-                              {dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                              {dt.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                             </td>
                             <td className="px-5 py-3.5 text-slate-400 font-mono text-xs">{l.ip || '—'}</td>
                           </tr>
