@@ -1,3 +1,86 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Scrollbar refinada */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-2xl shadow-sm border border-slate-100;
+  }
+
+  .btn-primary {
+    @apply bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800
+           text-white font-semibold px-4 py-2.5 rounded-xl
+           transition-all duration-150 text-sm
+           disabled:opacity-50 disabled:cursor-not-allowed
+           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2;
+  }
+
+  .btn-ghost {
+    @apply text-slate-600 hover:text-slate-900 hover:bg-slate-100
+           font-medium px-3 py-2 rounded-lg transition-all duration-150 text-sm;
+  }
+
+  .btn-danger {
+    @apply bg-red-600 hover:bg-red-700 text-white font-semibold
+           px-4 py-2.5 rounded-xl transition-all duration-150 text-sm
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .input {
+    @apply w-full border border-slate-200 bg-slate-50 rounded-xl px-3.5 py-2.5
+           text-sm text-slate-900 placeholder-slate-400
+           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
+           transition duration-150;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full;
+  }
+
+  .badge-gray   { @apply badge bg-slate-100 text-slate-600; }
+  .badge-blue   { @apply badge bg-blue-100 text-blue-700; }
+  .badge-yellow { @apply badge bg-amber-100 text-amber-700; }
+  .badge-red    { @apply badge bg-red-100 text-red-700; }
+  .badge-purple { @apply badge bg-violet-100 text-violet-700; }
+  .badge-green  { @apply badge bg-emerald-100 text-emerald-700; }
+}
+
+/* Kanban drag */
+.kanban-card-dragging {
+  opacity: 0.45;
+  transform: rotate(2deg);
+  box-shadow: 0 20px 40px rgba(0,0,0,0.15) !important;
+}
+
+.kanban-col-dragover {
+  background: rgba(99,102,241,0.06) !important;
+  border-color: #6366F1 !important;
+}
+
+/* Animações suaves */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fadeIn { animation: fadeIn 0.25s ease-out; }
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.animate-slideIn { animation: slideIn 0.2s ease-out; }
