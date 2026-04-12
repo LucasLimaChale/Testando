@@ -5,12 +5,22 @@ import Sidebar from '@/components/Sidebar';
 import { api } from '@/lib/api';
 
 export default function ConfiguracoesPage() {
-  const [user, setUser] = useState(null);
-  const [logs, setLogs] = useState([]);
-  const [users, setUsers] = useState([]);
+  const [user, setUser]           = useState(null);
+  const [logs, setLogs]           = useState([]);
+  const [users, setUsers]         = useState([]);
   const [filterUser, setFilterUser] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState('logs');
+  const [loadingLogs, setLoadingLogs] = useState(false);
+
+  // Formulário de email
+  const [emailForm, setEmailForm]       = useState({ email: '' });
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [emailMsg, setEmailMsg]         = useState(null); // { type: 'ok'|'err', text }
+
+  // Formulário de senha
+  const [senhaForm, setSenhaForm]       = useState({ senha_atual: '', nova_senha: '', confirmar: '' });
+  const [senhaLoading, setSenhaLoading] = useState(false);
+  const [senhaMsg, setSenhaMsg]         = useState(null);
+
   const router = useRouter();
 
   useEffect(() => {
@@ -18,6 +28,7 @@ export default function ConfiguracoesPage() {
     if (!u) { router.replace('/'); return; }
     const parsed = JSON.parse(u);
     setUser(parsed);
+    setEmailForm({ email: parsed.email || '' });
     if (parsed.tipo === 'admin') {
       loadLogs();
       api.getUsers().then(setUsers).catch(() => {});
@@ -25,18 +36,62 @@ export default function ConfiguracoesPage() {
   }, [router]);
 
   async function loadLogs(userId = '') {
-    setLoading(true);
+    setLoadingLogs(true);
     try {
       const data = await api.getLogs(userId ? { user_id: userId } : {});
       setLogs(data);
     } finally {
-      setLoading(false);
+      setLoadingLogs(false);
     }
   }
 
   function handleFilterUser(id) {
     setFilterUser(id);
     loadLogs(id);
+  }
+
+  async function handleEmailSubmit(e) {
+    e.preventDefault();
+    if (!emailForm.email.trim()) return;
+    setEmailMsg(null);
+    setEmailLoading(true);
+    try {
+      const { user: updated, token } = await api.updateMe({ email: emailForm.email.trim() });
+      // Atualiza localStorage
+      const stored = JSON.parse(localStorage.getItem('user') || '{}');
+      const newUser = { ...stored, email: updated.email };
+      localStorage.setItem('user', JSON.stringify(newUser));
+      localStorage.setItem('token', token);
+      setUser(newUser);
+      setEmailMsg({ type: 'ok', text: 'Email atualizado com sucesso!' });
+    } catch (err) {
+      setEmailMsg({ type: 'err', text: err.message });
+    } finally {
+      setEmailLoading(false);
+    }
+  }
+
+  async function handleSenhaSubmit(e) {
+    e.preventDefault();
+    setSenhaMsg(null);
+    if (senhaForm.nova_senha !== senhaForm.confirmar) {
+      setSenhaMsg({ type: 'err', text: 'A nova senha e a confirmação não coincidem.' });
+      return;
+    }
+    setSenhaLoading(true);
+    try {
+      const { token } = await api.updateMe({
+        senha_atual: senhaForm.senha_atual,
+        nova_senha:  senhaForm.nova_senha,
+      });
+      localStorage.setItem('token', token);
+      setSenhaForm({ senha_atual: '', nova_senha: '', confirmar: '' });
+      setSenhaMsg({ type: 'ok', text: 'Senha alterada com sucesso!' });
+    } catch (err) {
+      setSenhaMsg({ type: 'err', text: err.message });
+    } finally {
+      setSenhaLoading(false);
+    }
   }
 
   return (
@@ -46,15 +101,15 @@ export default function ConfiguracoesPage() {
 
         <div className="bg-white border-b border-slate-200 px-6 py-5">
           <h1 className="text-xl font-bold text-slate-900">Configurações</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Preferências e auditoria do sistema</p>
+          <p className="text-sm text-slate-500 mt-0.5">Perfil, acesso e auditoria</p>
         </div>
 
-        <div className="max-w-5xl mx-auto px-6 py-6">
+        <div className="max-w-3xl mx-auto px-6 py-6 space-y-6">
+
           {/* Perfil */}
-          <div className="card p-6 mb-6">
-            <h2 className="font-semibold text-slate-900 mb-4">Meu Perfil</h2>
+          <div className="card p-6">
             <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-full bg-indigo-100 border-2 border-indigo-200 flex items-center justify-center">
+              <div className="w-14 h-14 rounded-full bg-indigo-100 border-2 border-indigo-200 flex items-center justify-center shrink-0">
                 <span className="text-indigo-600 text-xl font-bold uppercase">{user?.nome?.charAt(0)}</span>
               </div>
               <div>
@@ -63,6 +118,128 @@ export default function ConfiguracoesPage() {
                 <span className="badge badge-blue mt-1 capitalize">{user?.tipo}</span>
               </div>
             </div>
+          </div>
+
+          {/* Trocar Email */}
+          <div className="card p-6">
+            <h2 className="font-semibold text-slate-900 mb-1">Alterar e-mail de login</h2>
+            <p className="text-sm text-slate-500 mb-5">Este é o e-mail usado para entrar no sistema.</p>
+
+            <form onSubmit={handleEmailSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Novo e-mail</label>
+                <input
+                  type="email"
+                  value={emailForm.email}
+                  onChange={e => setEmailForm({ email: e.target.value })}
+                  className="input max-w-sm"
+                  required
+                  placeholder="novo@email.com"
+                />
+              </div>
+
+              {emailMsg && (
+                <div className={`flex items-center gap-2 rounded-xl px-4 py-3 text-sm max-w-sm ${
+                  emailMsg.type === 'ok'
+                    ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+                    : 'bg-red-50 border border-red-200 text-red-700'
+                }`}>
+                  {emailMsg.type === 'ok'
+                    ? <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                    : <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                  }
+                  {emailMsg.text}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={emailLoading || emailForm.email === user?.email}
+                className="btn-primary flex items-center gap-2 disabled:opacity-50"
+              >
+                {emailLoading && (
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                  </svg>
+                )}
+                Salvar e-mail
+              </button>
+            </form>
+          </div>
+
+          {/* Trocar Senha */}
+          <div className="card p-6">
+            <h2 className="font-semibold text-slate-900 mb-1">Alterar senha</h2>
+            <p className="text-sm text-slate-500 mb-5">Mínimo de 6 caracteres.</p>
+
+            <form onSubmit={handleSenhaSubmit} className="space-y-4 max-w-sm">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Senha atual</label>
+                <input
+                  type="password"
+                  value={senhaForm.senha_atual}
+                  onChange={e => setSenhaForm(f => ({ ...f, senha_atual: e.target.value }))}
+                  className="input"
+                  required
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Nova senha</label>
+                <input
+                  type="password"
+                  value={senhaForm.nova_senha}
+                  onChange={e => setSenhaForm(f => ({ ...f, nova_senha: e.target.value }))}
+                  className="input"
+                  required
+                  minLength={6}
+                  placeholder="••••••••"
+                  autoComplete="new-password"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Confirmar nova senha</label>
+                <input
+                  type="password"
+                  value={senhaForm.confirmar}
+                  onChange={e => setSenhaForm(f => ({ ...f, confirmar: e.target.value }))}
+                  className="input"
+                  required
+                  placeholder="••••••••"
+                  autoComplete="new-password"
+                />
+              </div>
+
+              {senhaMsg && (
+                <div className={`flex items-center gap-2 rounded-xl px-4 py-3 text-sm ${
+                  senhaMsg.type === 'ok'
+                    ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+                    : 'bg-red-50 border border-red-200 text-red-700'
+                }`}>
+                  {senhaMsg.type === 'ok'
+                    ? <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                    : <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                  }
+                  {senhaMsg.text}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={senhaLoading}
+                className="btn-primary flex items-center gap-2 disabled:opacity-50"
+              >
+                {senhaLoading && (
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                  </svg>
+                )}
+                Alterar senha
+              </button>
+            </form>
           </div>
 
           {/* Logs — somente admin */}
@@ -96,7 +273,7 @@ export default function ConfiguracoesPage() {
                 </div>
               </div>
 
-              {loading ? (
+              {loadingLogs ? (
                 <div className="text-center py-12 text-slate-400 text-sm">Carregando logs...</div>
               ) : logs.length === 0 ? (
                 <div className="text-center py-16">
@@ -117,11 +294,7 @@ export default function ConfiguracoesPage() {
                     <tbody className="divide-y divide-slate-50">
                       {logs.map(l => {
                         const dt = new Date(l.data_hora_login);
-                        const ROLE_CLS = {
-                          admin: 'badge-purple',
-                          editor: 'badge-blue',
-                          cliente: 'badge-gray',
-                        };
+                        const ROLE_CLS = { admin: 'badge-purple', editor: 'badge-blue', cliente: 'badge-gray' };
                         return (
                           <tr key={l.id} className="hover:bg-slate-50/60 transition-colors">
                             <td className="px-5 py-3.5">
@@ -138,19 +311,13 @@ export default function ConfiguracoesPage() {
                               </div>
                             </td>
                             <td className="px-5 py-3.5">
-                              <span className={`badge ${ROLE_CLS[l.tipo] || 'badge-gray'} capitalize`}>
-                                {l.tipo}
-                              </span>
+                              <span className={`badge ${ROLE_CLS[l.tipo] || 'badge-gray'} capitalize`}>{l.tipo}</span>
                             </td>
-                            <td className="px-5 py-3.5 text-slate-600">
-                              {dt.toLocaleDateString('pt-BR')}
-                            </td>
+                            <td className="px-5 py-3.5 text-slate-600">{dt.toLocaleDateString('pt-BR')}</td>
                             <td className="px-5 py-3.5 text-slate-600 font-mono text-xs">
                               {dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                             </td>
-                            <td className="px-5 py-3.5 text-slate-400 font-mono text-xs">
-                              {l.ip || '—'}
-                            </td>
+                            <td className="px-5 py-3.5 text-slate-400 font-mono text-xs">{l.ip || '—'}</td>
                           </tr>
                         );
                       })}
@@ -158,18 +325,6 @@ export default function ConfiguracoesPage() {
                   </table>
                 </div>
               )}
-            </div>
-          )}
-
-          {/* Para não-admin */}
-          {user?.tipo !== 'admin' && (
-            <div className="card p-8 text-center">
-              <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center mx-auto mb-3">
-                <svg className="w-6 h-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-              </div>
-              <p className="text-slate-500 text-sm">Configurações avançadas disponíveis apenas para administradores.</p>
             </div>
           )}
         </div>

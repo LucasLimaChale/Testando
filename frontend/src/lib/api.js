@@ -26,6 +26,7 @@ export const api = {
   login: (email, senha) =>
     request('/auth/login', { method: 'POST', body: JSON.stringify({ email, senha }) }),
   me: () => request('/auth/me'),
+  updateMe: (data) => request('/auth/me', { method: 'PATCH', body: JSON.stringify(data) }),
   getLogs: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
     return request(`/auth/logs${qs ? `?${qs}` : ''}`);

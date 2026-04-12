@@ -62,6 +62,52 @@ router.get('/me', authenticate, async (req, res) => {
   }
 });
 
+// PATCH /auth/me — atualizar próprio email e/ou senha
+router.patch('/me', authenticate, async (req, res) => {
+  const { email, senha_atual, nova_senha } = req.body;
+
+  if (!email?.trim() && !nova_senha)
+    return res.status(400).json({ error: 'Informe o novo email ou nova senha' });
+
+  try {
+    const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.user.id]);
+    const user = rows[0];
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+    // Se vai trocar senha, exige senha atual
+    if (nova_senha) {
+      if (!senha_atual)
+        return res.status(400).json({ error: 'Informe a senha atual para trocar a senha' });
+      const ok = await bcrypt.compare(senha_atual, user.senha);
+      if (!ok)
+        return res.status(401).json({ error: 'Senha atual incorreta' });
+      if (nova_senha.length < 6)
+        return res.status(400).json({ error: 'A nova senha deve ter pelo menos 6 caracteres' });
+    }
+
+    const novoEmail = email?.trim().toLowerCase() || user.email;
+    const novaHash  = nova_senha ? await bcrypt.hash(nova_senha, 10) : user.senha;
+
+    const { rows: updated } = await pool.query(
+      'UPDATE users SET email = $1, senha = $2 WHERE id = $3 RETURNING id, nome, email, tipo',
+      [novoEmail, novaHash, req.user.id]
+    );
+
+    // Retorna novo token para não deslogar
+    const token = jwt.sign(
+      { id: updated[0].id, email: updated[0].email, tipo: updated[0].tipo, nome: updated[0].nome },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.json({ user: updated[0], token });
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'Este email já está em uso' });
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 // GET /auth/users (admin)
 router.get('/users', authenticate, async (req, res) => {
   if (req.user.tipo !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
