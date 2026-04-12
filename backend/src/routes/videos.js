@@ -1,8 +1,15 @@
 const router = require('express').Router();
 const { randomUUID } = require('crypto');
+const multer = require('multer');
 const pool = require('../config/database');
 const supabase = require('../config/supabase');
 const { authenticate, authorize } = require('../middleware/auth');
+
+// Multer: guarda em memória (sem disco), limite 500 MB
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 500 * 1024 * 1024 },
+});
 
 const BUCKET = process.env.SUPABASE_STORAGE_BUCKET || 'videos';
 
@@ -91,26 +98,36 @@ router.get('/:id', authenticate, async (req, res) => {
   }
 });
 
-// POST /videos/upload-url
-router.post('/upload-url', authenticate, authorize('admin', 'editor'), async (req, res) => {
-  const { filename, contentType } = req.body;
-  if (!filename || !contentType)
-    return res.status(400).json({ error: 'filename e contentType são obrigatórios' });
+// POST /videos/upload — upload via backend (evita CORS do browser → Supabase)
+router.post(
+  '/upload',
+  authenticate,
+  authorize('admin', 'editor'),
+  upload.single('file'),
+  async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
 
-  const ext = filename.split('.').pop().toLowerCase();
-  const storagePath = `${randomUUID()}.${ext}`;
+    const ext = (req.file.originalname.split('.').pop() || 'mp4').toLowerCase();
+    const storagePath = `${randomUUID()}.${ext}`;
 
-  try {
-    const { data, error } = await supabase.storage
-      .from(BUCKET)
-      .createSignedUploadUrl(storagePath);
-    if (error) throw error;
-    const publicUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${storagePath}`;
-    res.json({ signedUrl: data.signedUrl, storagePath, publicUrl });
-  } catch (err) {
-    res.status(500).json({ error: 'Erro ao gerar URL de upload: ' + err.message });
+    try {
+      const { error } = await supabase.storage
+        .from(BUCKET)
+        .upload(storagePath, req.file.buffer, {
+          contentType: req.file.mimetype,
+          upsert: false,
+        });
+
+      if (error) throw error;
+
+      const publicUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${storagePath}`;
+      res.json({ storagePath, publicUrl });
+    } catch (err) {
+      console.error('[Upload]', err.message);
+      res.status(500).json({ error: 'Erro ao enviar para o storage: ' + err.message });
+    }
   }
-});
+);
 
 // POST /videos
 router.post('/', authenticate, authorize('admin', 'editor'), async (req, res) => {

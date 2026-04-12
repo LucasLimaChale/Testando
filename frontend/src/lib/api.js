@@ -54,11 +54,38 @@ export const api = {
   },
   getVideo: (id) => request(`/videos/${id}`),
   getUrgent: () => request('/videos/urgent'),
-  getUploadUrl: (filename, contentType) =>
-    request('/videos/upload-url', {
-      method: 'POST',
-      body: JSON.stringify({ filename, contentType }),
-    }),
+  // Upload do arquivo via backend (sem CORS com Supabase)
+  uploadVideo: async (file, onProgress) => {
+    const token = getToken();
+    const formData = new FormData();
+    formData.append('file', file);
+
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${API_URL}/videos/upload`);
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && onProgress) {
+          onProgress(Math.round((e.loaded / e.total) * 100));
+        }
+      };
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(JSON.parse(xhr.responseText));
+        } else {
+          try {
+            reject(new Error(JSON.parse(xhr.responseText).error || `HTTP ${xhr.status}`));
+          } catch {
+            reject(new Error(`HTTP ${xhr.status}`));
+          }
+        }
+      };
+      xhr.onerror = () => reject(new Error('Erro de conexão no upload'));
+      xhr.send(formData);
+    });
+  },
   createVideo: (data) => request('/videos', { method: 'POST', body: JSON.stringify(data) }),
   updateVideoStatus: (id, status) =>
     request(`/videos/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
@@ -70,12 +97,4 @@ export const api = {
     request(`/videos/${id}/revision`, { method: 'POST', body: JSON.stringify(data) }),
   deleteVideo: (id) => request(`/videos/${id}`, { method: 'DELETE' }),
 
-  uploadToStorage: (signedUrl, file) =>
-    fetch(signedUrl, {
-      method: 'PUT',
-      headers: { 'Content-Type': file.type },
-      body: file,
-    }).then(res => {
-      if (!res.ok) throw new Error('Falha no upload do arquivo');
-    }),
 };

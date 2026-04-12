@@ -47,10 +47,12 @@ export default function UploadPage() {
     setProgress(10);
 
     try {
-      const { signedUrl, storagePath, publicUrl } = await api.getUploadUrl(file.name, file.type);
-      setProgress(30);
-      await api.uploadToStorage(signedUrl, file);
-      setProgress(80);
+      // Upload via backend (sem CORS) com progresso real
+      const { publicUrl, storagePath } = await api.uploadVideo(file, (pct) => {
+        setProgress(Math.round(pct * 0.85)); // 0–85% = upload
+      });
+      setProgress(90);
+
       const video = await api.createVideo({
         cliente_id: clienteId,
         titulo: titulo.trim(),

@@ -18,6 +18,7 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
 
 app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
 // Captura IP real por trás de proxy (Traefik/nginx)
