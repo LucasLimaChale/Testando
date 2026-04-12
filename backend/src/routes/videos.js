@@ -5,10 +5,10 @@ const pool = require('../config/database');
 const supabase = require('../config/supabase');
 const { authenticate, authorize } = require('../middleware/auth');
 
-// Multer: guarda em memória (sem disco), limite 500 MB
+// Multer: guarda em memória, limite 2 GB
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 500 * 1024 * 1024 },
+  limits: { fileSize: 2 * 1024 * 1024 * 1024 },
 });
 
 const BUCKET = process.env.SUPABASE_STORAGE_BUCKET || 'videos';
