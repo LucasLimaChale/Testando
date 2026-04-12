@@ -1,8 +1,6 @@
 const cron = require('node-cron');
 const pool = require('../config/database');
-const supabase = require('../config/supabase');
-
-const BUCKET = process.env.SUPABASE_STORAGE_BUCKET || 'videos';
+const { deleteFiles } = require('../config/storage');
 
 async function cleanupOldVideos() {
   console.log('[Cleanup] Iniciando limpeza de vídeos antigos...');
@@ -26,13 +24,7 @@ async function cleanupOldVideos() {
 
     const paths = videos.map(v => v.storage_path);
 
-    // Remove arquivos do Supabase Storage
-    const { error } = await supabase.storage.from(BUCKET).remove(paths);
-
-    if (error) {
-      console.error('[Cleanup] Erro ao remover arquivos do storage:', error.message);
-      return;
-    }
+    await deleteFiles(paths);
 
     // Atualiza DB: zera url e storage_path, mantém histórico
     const ids = videos.map(v => v.id);

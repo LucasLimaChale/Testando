@@ -2,7 +2,7 @@ const router = require('express').Router();
 const { randomUUID } = require('crypto');
 const multer = require('multer');
 const pool = require('../config/database');
-const supabase = require('../config/supabase');
+const { uploadFile } = require('../config/storage');
 const { authenticate, authorize } = require('../middleware/auth');
 
 // Multer: guarda em memória, limite 2 GB
@@ -111,16 +111,7 @@ router.post(
     const storagePath = `${randomUUID()}.${ext}`;
 
     try {
-      const { error } = await supabase.storage
-        .from(BUCKET)
-        .upload(storagePath, req.file.buffer, {
-          contentType: req.file.mimetype,
-          upsert: false,
-        });
-
-      if (error) throw error;
-
-      const publicUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${storagePath}`;
+      const publicUrl = await uploadFile(req.file.buffer, storagePath, req.file.mimetype);
       res.json({ storagePath, publicUrl });
     } catch (err) {
       console.error('[Upload]', err.message);
@@ -291,7 +282,8 @@ router.delete('/:id', authenticate, authorize('admin'), async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT storage_path FROM videos WHERE id = $1', [req.params.id]);
     if (rows[0]?.storage_path) {
-      await supabase.storage.from(BUCKET).remove([rows[0].storage_path]);
+      const { deleteFiles } = require('../config/storage');
+      await deleteFiles([rows[0].storage_path]).catch(() => {});
     }
     await pool.query('DELETE FROM videos WHERE id = $1', [req.params.id]);
     res.status(204).end();
