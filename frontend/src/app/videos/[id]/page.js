@@ -284,18 +284,19 @@ export default function VideoPage() {
             <h2 className="font-semibold text-slate-900 mb-4">Informações</h2>
             <dl className="grid grid-cols-2 sm:grid-cols-3 gap-5">
               {[
-                ['Cliente',    video?.cliente_nome],
+                ['Empresa',    video?.empresa_nome],
+                ['Colaborador', video?.colaborador_nome || video?.cliente_nome],
                 ['Editor',     video?.editor_nome || '—'],
                 ['Versão',     `v${video?.versao}`],
                 ['Status',     sm.label],
                 ['Criado em',  new Date(video?.criado_em).toLocaleDateString('pt-BR')],
                 ['Atualizado', new Date(video?.atualizado_em).toLocaleDateString('pt-BR')],
-              ].map(([label, value]) => (
+              ].map(([label, value]) => value ? (
                 <div key={label}>
                   <dt className="text-xs text-slate-400 uppercase tracking-wide font-medium">{label}</dt>
                   <dd className="text-sm font-semibold text-slate-800 mt-0.5">{value}</dd>
                 </div>
-              ))}
+              ) : null)}
             </dl>
 
             {user?.tipo === 'admin' && (

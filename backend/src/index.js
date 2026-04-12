@@ -4,10 +4,11 @@ const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
 
-const authRoutes    = require('./routes/auth');
-const videoRoutes   = require('./routes/videos');
-const clientRoutes  = require('./routes/clients');
-const webhookRoutes = require('./routes/webhooks');
+const authRoutes     = require('./routes/auth');
+const videoRoutes    = require('./routes/videos');
+const clientRoutes   = require('./routes/clients');
+const empresaRoutes  = require('./routes/empresas');
+const webhookRoutes  = require('./routes/webhooks');
 const { startCleanupJob } = require('./jobs/cleanup');
 
 const app = express();
@@ -28,10 +29,11 @@ app.get('/health', (_req, res) =>
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 );
 
-app.use('/auth',    authRoutes);
-app.use('/videos',  videoRoutes);
-app.use('/clients', clientRoutes);
-app.use('/webhook', webhookRoutes);
+app.use('/auth',      authRoutes);
+app.use('/videos',   videoRoutes);
+app.use('/clients',  clientRoutes);
+app.use('/empresas', empresaRoutes);
+app.use('/webhook',  webhookRoutes);
 
 app.use((_req, res) => res.status(404).json({ error: 'Rota não encontrada' }));
 

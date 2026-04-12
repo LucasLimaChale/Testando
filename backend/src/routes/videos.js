@@ -5,38 +5,48 @@ const pool = require('../config/database');
 const { uploadFile } = require('../config/storage');
 const { authenticate, authorize } = require('../middleware/auth');
 
-// Multer: guarda em memória, limite 2 GB
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 2 * 1024 * 1024 * 1024 },
 });
 
-const BUCKET = process.env.SUPABASE_STORAGE_BUCKET || 'videos';
-
 const VALID_STATUSES = ['LISTA', 'EM_EDICAO', 'AGUARDANDO_APROVACAO', 'REPROVADO', 'APROVADO', 'PUBLICADO'];
+
+// Base SELECT reutilizável
+const BASE_SELECT = `
+  SELECT v.*,
+         col.nome     AS colaborador_nome,
+         col.nome     AS cliente_nome,
+         col.telefone AS colaborador_telefone,
+         col.telefone AS cliente_telefone,
+         col.cargo    AS colaborador_cargo,
+         e.nome       AS empresa_nome,
+         e.id         AS empresa_id,
+         u.nome       AS editor_nome
+  FROM videos v
+  LEFT JOIN colaboradores col ON v.colaborador_id = col.id
+  LEFT JOIN empresas e        ON col.empresa_id   = e.id
+  LEFT JOIN users u           ON v.editor_id      = u.id
+`;
 
 // GET /videos
 router.get('/', authenticate, async (req, res) => {
   try {
-    const { status, cliente_id, q } = req.query;
+    const { status, colaborador_id, cliente_id, empresa_id, q } = req.query;
     const params = [];
     const conditions = [];
 
-    let base = `
-      SELECT v.*, c.nome AS cliente_nome, c.telefone AS cliente_telefone,
-             u.nome AS editor_nome
-      FROM videos v
-      JOIN clientes c ON v.cliente_id = c.id
-      LEFT JOIN users u ON v.editor_id = u.id
-    `;
+    let base = BASE_SELECT;
 
     if (req.user.tipo === 'cliente') {
       params.push(req.user.id);
-      conditions.push(`c.user_id = $${params.length}`);
+      conditions.push(`col.user_id = $${params.length}`);
     }
-    if (status)     { params.push(status);     conditions.push(`v.status = $${params.length}`); }
-    if (cliente_id) { params.push(cliente_id); conditions.push(`v.cliente_id = $${params.length}`); }
-    if (q)          { params.push(`%${q}%`);   conditions.push(`v.titulo ILIKE $${params.length}`); }
+    if (status)         { params.push(status);         conditions.push(`v.status = $${params.length}`); }
+    if (colaborador_id) { params.push(colaborador_id); conditions.push(`v.colaborador_id = $${params.length}`); }
+    if (cliente_id)     { params.push(cliente_id);     conditions.push(`v.colaborador_id = $${params.length}`); }
+    if (empresa_id)     { params.push(empresa_id);     conditions.push(`e.id = $${params.length}`); }
+    if (q)              { params.push(`%${q}%`);        conditions.push(`v.titulo ILIKE $${params.length}`); }
 
     if (conditions.length) base += ' WHERE ' + conditions.join(' AND ');
     base += ' ORDER BY v.atualizado_em DESC';
@@ -49,13 +59,11 @@ router.get('/', authenticate, async (req, res) => {
   }
 });
 
-// GET /videos/urgent  — aprovados há mais de 2 dias sem publicar
+// GET /videos/urgent — aprovados há mais de 2 dias sem publicar
 router.get('/urgent', authenticate, authorize('admin'), async (req, res) => {
   try {
     const { rows } = await pool.query(`
-      SELECT v.*, c.nome AS cliente_nome, c.telefone AS cliente_telefone
-      FROM videos v
-      JOIN clientes c ON v.cliente_id = c.id
+      ${BASE_SELECT}
       WHERE v.status = 'APROVADO'
         AND v.atualizado_em < NOW() - INTERVAL '2 days'
       ORDER BY v.atualizado_em ASC
@@ -70,13 +78,21 @@ router.get('/urgent', authenticate, authorize('admin'), async (req, res) => {
 router.get('/:id', authenticate, async (req, res) => {
   try {
     const { rows } = await pool.query(`
-      SELECT v.*, c.nome AS cliente_nome, c.telefone AS cliente_telefone,
-             u.nome AS editor_nome,
+      SELECT v.*,
+             col.nome     AS colaborador_nome,
+             col.nome     AS cliente_nome,
+             col.telefone AS colaborador_telefone,
+             col.telefone AS cliente_telefone,
+             col.cargo    AS colaborador_cargo,
+             e.nome       AS empresa_nome,
+             e.id         AS empresa_id,
+             u.nome       AS editor_nome,
         (SELECT json_agg(f ORDER BY f.criado_em DESC)
          FROM feedbacks f WHERE f.video_id = v.id) AS feedbacks
       FROM videos v
-      JOIN clientes c ON v.cliente_id = c.id
-      LEFT JOIN users u ON v.editor_id = u.id
+      LEFT JOIN colaboradores col ON v.colaborador_id = col.id
+      LEFT JOIN empresas e        ON col.empresa_id   = e.id
+      LEFT JOIN users u           ON v.editor_id      = u.id
       WHERE v.id = $1
     `, [req.params.id]);
 
@@ -85,8 +101,8 @@ router.get('/:id', authenticate, async (req, res) => {
 
     if (req.user.tipo === 'cliente') {
       const { rows: check } = await pool.query(
-        'SELECT id FROM clientes WHERE id = $1 AND user_id = $2',
-        [video.cliente_id, req.user.id]
+        'SELECT id FROM colaboradores WHERE id = $1 AND user_id = $2',
+        [video.colaborador_id, req.user.id]
       );
       if (!check[0]) return res.status(403).json({ error: 'Acesso negado' });
     }
@@ -98,7 +114,7 @@ router.get('/:id', authenticate, async (req, res) => {
   }
 });
 
-// POST /videos/upload — upload via backend (evita CORS do browser → Supabase)
+// POST /videos/upload
 router.post(
   '/upload',
   authenticate,
@@ -106,10 +122,8 @@ router.post(
   upload.single('file'),
   async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
-
     const ext = (req.file.originalname.split('.').pop() || 'mp4').toLowerCase();
     const storagePath = `${randomUUID()}.${ext}`;
-
     try {
       const publicUrl = await uploadFile(req.file.buffer, storagePath, req.file.mimetype);
       res.json({ storagePath, publicUrl });
@@ -122,18 +136,19 @@ router.post(
 
 // POST /videos
 router.post('/', authenticate, authorize('admin', 'editor'), async (req, res) => {
-  const { cliente_id, titulo, url, storage_path, status } = req.body;
-  if (!cliente_id || !titulo)
-    return res.status(400).json({ error: 'cliente_id e titulo são obrigatórios' });
+  const { colaborador_id, cliente_id, titulo, url, storage_path, status } = req.body;
+  const colId = colaborador_id || cliente_id;
+  if (!colId || !titulo)
+    return res.status(400).json({ error: 'colaborador_id e titulo são obrigatórios' });
 
   const initialStatus = status && VALID_STATUSES.includes(status) ? status : 'AGUARDANDO_APROVACAO';
 
   try {
     const { rows } = await pool.query(`
-      INSERT INTO videos (cliente_id, editor_id, titulo, url, storage_path, status, versao)
+      INSERT INTO videos (colaborador_id, editor_id, titulo, url, storage_path, status, versao)
       VALUES ($1, $2, $3, $4, $5, $6, 1)
       RETURNING *
-    `, [cliente_id, req.user.id, titulo, url || null, storage_path || null, initialStatus]);
+    `, [colId, req.user.id, titulo, url || null, storage_path || null, initialStatus]);
     res.status(201).json(rows[0]);
   } catch (err) {
     console.error(err);
@@ -141,7 +156,7 @@ router.post('/', authenticate, authorize('admin', 'editor'), async (req, res) =>
   }
 });
 
-// PATCH /videos/:id/status  — Kanban drag-and-drop
+// PATCH /videos/:id/status
 router.patch('/:id/status', authenticate, authorize('admin', 'editor'), async (req, res) => {
   const { status } = req.body;
   if (!status || !VALID_STATUSES.includes(status))
@@ -168,8 +183,8 @@ router.patch('/:id/approve', authenticate, async (req, res) => {
 
     if (req.user.tipo === 'cliente') {
       const { rows } = await pool.query(
-        'SELECT id FROM clientes WHERE id = $1 AND user_id = $2',
-        [vr[0].cliente_id, req.user.id]
+        'SELECT id FROM colaboradores WHERE id = $1 AND user_id = $2',
+        [vr[0].colaborador_id, req.user.id]
       );
       if (!rows[0]) return res.status(403).json({ error: 'Acesso negado' });
     }
@@ -205,8 +220,8 @@ router.patch('/:id/reject', authenticate, async (req, res) => {
 
     if (req.user.tipo === 'cliente') {
       const { rows } = await pool.query(
-        'SELECT id FROM clientes WHERE id = $1 AND user_id = $2',
-        [vr[0].cliente_id, req.user.id]
+        'SELECT id FROM colaboradores WHERE id = $1 AND user_id = $2',
+        [vr[0].colaborador_id, req.user.id]
       );
       if (!rows[0]) return res.status(403).json({ error: 'Acesso negado' });
     }
@@ -266,10 +281,10 @@ router.post('/:id/revision', authenticate, authorize('admin', 'editor'), async (
     const orig = vr[0];
 
     const { rows } = await pool.query(`
-      INSERT INTO videos (cliente_id, editor_id, titulo, url, storage_path, status, versao)
+      INSERT INTO videos (colaborador_id, editor_id, titulo, url, storage_path, status, versao)
       VALUES ($1, $2, $3, $4, $5, 'AGUARDANDO_APROVACAO', $6)
       RETURNING *
-    `, [orig.cliente_id, req.user.id, titulo || orig.titulo, url || null, storage_path || null, orig.versao + 1]);
+    `, [orig.colaborador_id, req.user.id, titulo || orig.titulo, url || null, storage_path || null, orig.versao + 1]);
 
     res.status(201).json(rows[0]);
   } catch (err) {

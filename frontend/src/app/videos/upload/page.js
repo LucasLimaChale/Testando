@@ -6,9 +6,13 @@ import Sidebar from '@/components/Sidebar';
 import { api } from '@/lib/api';
 
 export default function UploadPage() {
-  const [clients, setClients] = useState([]);
+  const [empresas, setEmpresas] = useState([]);
+  const [colaboradores, setColaboradores] = useState([]);
+  const [loadingColabs, setLoadingColabs] = useState(false);
+
   const [titulo, setTitulo] = useState('');
-  const [clienteId, setClienteId] = useState('');
+  const [empresaId, setEmpresaId] = useState('');
+  const [colaboradorId, setColaboradorId] = useState('');
   const [file, setFile] = useState(null);
   const [progress, setProgress] = useState(0);
   const [uploading, setUploading] = useState(false);
@@ -22,8 +26,22 @@ export default function UploadPage() {
     if (!u) { router.replace('/'); return; }
     const user = JSON.parse(u);
     if (!['admin', 'editor'].includes(user.tipo)) { router.replace('/dashboard'); return; }
-    api.getClients().then(setClients).catch(console.error);
+    api.getEmpresas().then(setEmpresas).catch(console.error);
   }, [router]);
+
+  async function handleEmpresaChange(id) {
+    setEmpresaId(id);
+    setColaboradorId('');
+    setColaboradores([]);
+    if (!id) return;
+    setLoadingColabs(true);
+    try {
+      const data = await api.getColaboradores(id);
+      setColaboradores(data.filter(c => c.ativo));
+    } finally {
+      setLoadingColabs(false);
+    }
+  }
 
   function handleFileChange(e) {
     const f = e.target.files[0];
@@ -38,8 +56,8 @@ export default function UploadPage() {
 
   async function handleUpload(e) {
     e.preventDefault();
-    if (!file || !titulo.trim() || !clienteId) {
-      setError('Preencha todos os campos');
+    if (!file || !titulo.trim() || !colaboradorId) {
+      setError('Preencha todos os campos obrigatórios');
       return;
     }
     setError('');
@@ -47,14 +65,13 @@ export default function UploadPage() {
     setProgress(10);
 
     try {
-      // Upload via backend (sem CORS) com progresso real
       const { publicUrl, storagePath } = await api.uploadVideo(file, (pct) => {
-        setProgress(Math.round(pct * 0.85)); // 0–85% = upload
+        setProgress(Math.round(pct * 0.85));
       });
       setProgress(90);
 
       const video = await api.createVideo({
-        cliente_id: clienteId,
+        colaborador_id: colaboradorId,
         titulo: titulo.trim(),
         url: publicUrl,
         storage_path: storagePath,
@@ -71,17 +88,24 @@ export default function UploadPage() {
     }
   }
 
+  function getSelectedColaborador() {
+    return colaboradores.find(c => c.id === colaboradorId);
+  }
+
   function getWhatsAppLink() {
-    const client = clients.find(c => c.id === clienteId);
-    if (!client?.telefone) return null;
-    const phone = client.telefone.replace(/\D/g, '');
-    const appUrl = process.env.NEXT_PUBLIC_API_URL?.replace(':3001', ':3100') || 'http://localhost:3000';
-    const link = `${appUrl}/videos/${createdVideo?.id}`;
-    const msg = encodeURIComponent(
-      `Olá ${client.nome}! Seu vídeo está pronto 🎬\n\nPor favor, acesse o link abaixo para visualizar e aprovar:\n\n${link}\n\nCaso precise de ajustes, você pode reprovar e comentar diretamente na plataforma.`
+    const col = getSelectedColaborador();
+    if (!col?.telefone) return null;
+    const phone  = col.telefone.replace(/\D/g, '');
+    const appUrl = typeof window !== 'undefined' ? window.location.origin : '';
+    const link   = `${appUrl}/videos/${createdVideo?.id}`;
+    const msg    = encodeURIComponent(
+      `Olá ${col.nome}! Seu vídeo está pronto 🎬\n\nPor favor, acesse o link abaixo para visualizar e aprovar:\n\n${link}\n\nCaso precise de ajustes, você pode reprovar e comentar diretamente na plataforma.`
     );
     return `https://wa.me/55${phone}?text=${msg}`;
   }
+
+  const selectedEmpresa     = empresas.find(e => e.id === empresaId);
+  const selectedColaborador = getSelectedColaborador();
 
   return (
     <div className="lg:pl-60">
@@ -110,7 +134,10 @@ export default function UploadPage() {
                 </svg>
               </div>
               <h2 className="text-xl font-bold text-slate-900 mb-1">Vídeo enviado!</h2>
-              <p className="text-slate-500 text-sm mb-8">O vídeo está aguardando aprovação do cliente.</p>
+              <p className="text-slate-500 text-sm mb-2">
+                {selectedEmpresa?.nome} · {selectedColaborador?.nome}
+              </p>
+              <p className="text-slate-400 text-sm mb-8">O vídeo está aguardando aprovação.</p>
 
               <div className="space-y-3">
                 {getWhatsAppLink() ? (
@@ -130,7 +157,7 @@ export default function UploadPage() {
                     <svg className="w-4 h-4 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    Cliente sem telefone cadastrado. Cadastre o telefone para enviar via WhatsApp.
+                    Colaborador sem telefone. Cadastre o número para enviar via WhatsApp.
                   </div>
                 )}
 
@@ -147,6 +174,8 @@ export default function UploadPage() {
           ) : (
             <div className="card p-6">
               <form onSubmit={handleUpload} className="space-y-5">
+
+                {/* Título */}
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                     Título do vídeo <span className="text-red-500">*</span>
@@ -161,25 +190,76 @@ export default function UploadPage() {
                   />
                 </div>
 
+                {/* Empresa */}
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                    Cliente <span className="text-red-500">*</span>
+                    Empresa <span className="text-red-500">*</span>
                   </label>
                   <select
-                    value={clienteId}
-                    onChange={e => setClienteId(e.target.value)}
+                    value={empresaId}
+                    onChange={e => handleEmpresaChange(e.target.value)}
                     className="input"
                     required
                   >
-                    <option value="">Selecione o cliente...</option>
-                    {clients.map(c => (
-                      <option key={c.id} value={c.id}>
-                        {c.nome}{c.empresa ? ` — ${c.empresa}` : ''}
-                      </option>
+                    <option value="">Selecione a empresa...</option>
+                    {empresas.map(e => (
+                      <option key={e.id} value={e.id}>{e.nome}</option>
                     ))}
                   </select>
                 </div>
 
+                {/* Colaborador — aparece só quando empresa selecionada */}
+                {empresaId && (
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                      Colaborador <span className="text-red-500">*</span>
+                    </label>
+                    {loadingColabs ? (
+                      <div className="input text-slate-400 text-sm">Carregando colaboradores...</div>
+                    ) : colaboradores.length === 0 ? (
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-700 flex items-center gap-2">
+                        <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        Nenhum colaborador ativo nesta empresa.
+                        <Link href="/admin/clients" className="underline font-medium">Cadastrar</Link>
+                      </div>
+                    ) : (
+                      <select
+                        value={colaboradorId}
+                        onChange={e => setColaboradorId(e.target.value)}
+                        className="input"
+                        required
+                      >
+                        <option value="">Selecione o colaborador...</option>
+                        {colaboradores.map(c => (
+                          <option key={c.id} value={c.id}>
+                            {c.nome}{c.cargo ? ` — ${c.cargo}` : ''}{c.telefone ? '' : ' ⚠ sem telefone'}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    {/* Preview do colaborador selecionado */}
+                    {colaboradorId && selectedColaborador && (
+                      <div className="mt-2 flex items-center gap-2 text-xs text-slate-500 bg-slate-50 px-3 py-2 rounded-lg">
+                        <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
+                          <span className="text-indigo-600 text-xs font-bold">
+                            {selectedColaborador.nome.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                        <span className="font-medium text-slate-700">{selectedColaborador.nome}</span>
+                        {selectedColaborador.telefone ? (
+                          <span className="text-emerald-600 ml-auto">{selectedColaborador.telefone}</span>
+                        ) : (
+                          <span className="text-amber-500 ml-auto">sem telefone</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Arquivo */}
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                     Arquivo de vídeo <span className="text-red-500">*</span>
@@ -215,12 +295,13 @@ export default function UploadPage() {
                           </svg>
                         </div>
                         <p className="text-slate-600 text-sm font-medium">Arraste o vídeo ou clique para selecionar</p>
-                        <p className="text-xs text-slate-400 mt-1">MP4, MOV, AVI, MKV até 500 MB</p>
+                        <p className="text-xs text-slate-400 mt-1">MP4, MOV, AVI, MKV — até 2 GB</p>
                       </>
                     )}
                   </div>
                 </div>
 
+                {/* Progresso */}
                 {uploading && (
                   <div>
                     <div className="flex justify-between text-xs text-slate-500 mb-1.5">

@@ -36,7 +36,7 @@ export const api = {
   createUser: (data) => request('/auth/users', { method: 'POST', body: JSON.stringify(data) }),
   deleteUser: (id) => request(`/auth/users/${id}`, { method: 'DELETE' }),
 
-  // Clients
+  // Clients (legacy)
   getClients: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
     return request(`/clients${qs ? `?${qs}` : ''}`);
@@ -47,6 +47,23 @@ export const api = {
     request(`/clients/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteClient: (id) => request(`/clients/${id}`, { method: 'DELETE' }),
 
+  // Empresas
+  getEmpresas: () => request('/empresas'),
+  getEmpresa: (id) => request(`/empresas/${id}`),
+  createEmpresa: (data) => request('/empresas', { method: 'POST', body: JSON.stringify(data) }),
+  updateEmpresa: (id, data) =>
+    request(`/empresas/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteEmpresa: (id) => request(`/empresas/${id}`, { method: 'DELETE' }),
+
+  // Colaboradores
+  getColaboradores: (empresaId) => request(`/empresas/${empresaId}/colaboradores`),
+  createColaborador: (empresaId, data) =>
+    request(`/empresas/${empresaId}/colaboradores`, { method: 'POST', body: JSON.stringify(data) }),
+  updateColaborador: (empresaId, id, data) =>
+    request(`/empresas/${empresaId}/colaboradores/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteColaborador: (empresaId, id) =>
+    request(`/empresas/${empresaId}/colaboradores/${id}`, { method: 'DELETE' }),
+
   // Videos
   getVideos: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
@@ -54,7 +71,6 @@ export const api = {
   },
   getVideo: (id) => request(`/videos/${id}`),
   getUrgent: () => request('/videos/urgent'),
-  // Upload do arquivo via backend (sem CORS com Supabase)
   uploadVideo: async (file, onProgress) => {
     const token = getToken();
     const formData = new FormData();
@@ -96,5 +112,4 @@ export const api = {
   createRevision: (id, data) =>
     request(`/videos/${id}/revision`, { method: 'POST', body: JSON.stringify(data) }),
   deleteVideo: (id) => request(`/videos/${id}`, { method: 'DELETE' }),
-
 };
