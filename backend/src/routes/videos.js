@@ -156,6 +156,21 @@ router.post('/', authenticate, authorize('admin', 'editor'), async (req, res) =>
   }
 });
 
+// PATCH /videos/:id — atualizar url e storage_path (após upload)
+router.patch('/:id', authenticate, authorize('admin', 'editor'), async (req, res) => {
+  const { url, storage_path } = req.body;
+  try {
+    const { rows } = await pool.query(
+      'UPDATE videos SET url=$1, storage_path=$2 WHERE id=$3 RETURNING *',
+      [url || null, storage_path || null, req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Vídeo não encontrado' });
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 // PATCH /videos/:id/status
 router.patch('/:id/status', authenticate, authorize('admin', 'editor'), async (req, res) => {
   const { status } = req.body;
