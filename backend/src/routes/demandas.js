@@ -117,45 +117,56 @@ router.post('/public/:token', upload.array('files', 30), async (req, res) => {
   res.status(201).json({ ...sub[0], files });
 });
 
-// ─── Tarefas pessoais ────────────────────────────────────────────────────────
+// ─── Tarefas compartilhadas ───────────────────────────────────────────────────
 
-router.get('/tarefas', ...ADMIN, async (req, res) => {
+router.get('/tarefas', authenticate, async (req, res) => {
   const { rows } = await pool.query(
-    'SELECT * FROM tarefas WHERE user_id=$1 ORDER BY done ASC, created_at DESC',
-    [req.user.id]
+    `SELECT t.*, u.nome AS criado_por
+     FROM tarefas t
+     LEFT JOIN users u ON u.id = t.user_id
+     ORDER BY t.done ASC, t.created_at DESC`
   );
   res.json(rows);
 });
 
-router.post('/tarefas', ...ADMIN, async (req, res) => {
+router.post('/tarefas', authenticate, async (req, res) => {
   const { titulo, descricao } = req.body;
   if (!titulo?.trim()) return res.status(400).json({ error: 'titulo obrigatório' });
   const { rows } = await pool.query(
     'INSERT INTO tarefas (user_id, titulo, descricao) VALUES ($1,$2,$3) RETURNING *',
     [req.user.id, titulo.trim(), descricao?.trim() || null]
   );
-  res.status(201).json(rows[0]);
+  res.status(201).json({ ...rows[0], criado_por: req.user.nome });
 });
 
-router.patch('/tarefas/:id', ...ADMIN, async (req, res) => {
+router.patch('/tarefas/:id', authenticate, async (req, res) => {
   const { done, descricao } = req.body;
+  const isAdmin = req.user.tipo === 'admin';
   let rows;
   if (done !== undefined) {
     ({ rows } = await pool.query(
-      'UPDATE tarefas SET done=$1 WHERE id=$2 AND user_id=$3 RETURNING *',
-      [done, req.params.id, req.user.id]
+      isAdmin
+        ? 'UPDATE tarefas SET done=$1 WHERE id=$2 RETURNING *'
+        : 'UPDATE tarefas SET done=$1 WHERE id=$2 AND user_id=$3 RETURNING *',
+      isAdmin ? [done, req.params.id] : [done, req.params.id, req.user.id]
     ));
   } else {
     ({ rows } = await pool.query(
-      'UPDATE tarefas SET descricao=$1 WHERE id=$2 AND user_id=$3 RETURNING *',
-      [descricao ?? null, req.params.id, req.user.id]
+      isAdmin
+        ? 'UPDATE tarefas SET descricao=$1 WHERE id=$2 RETURNING *'
+        : 'UPDATE tarefas SET descricao=$1 WHERE id=$2 AND user_id=$3 RETURNING *',
+      isAdmin ? [descricao ?? null, req.params.id] : [descricao ?? null, req.params.id, req.user.id]
     ));
   }
   res.json(rows[0]);
 });
 
-router.delete('/tarefas/:id', ...ADMIN, async (req, res) => {
-  await pool.query('DELETE FROM tarefas WHERE id=$1 AND user_id=$2', [req.params.id, req.user.id]);
+router.delete('/tarefas/:id', authenticate, async (req, res) => {
+  const isAdmin = req.user.tipo === 'admin';
+  await pool.query(
+    isAdmin ? 'DELETE FROM tarefas WHERE id=$1' : 'DELETE FROM tarefas WHERE id=$1 AND user_id=$2',
+    isAdmin ? [req.params.id] : [req.params.id, req.user.id]
+  );
   res.status(204).end();
 });
 
