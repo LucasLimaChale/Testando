@@ -48,7 +48,7 @@ export default function LoginPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.894L15 14M4 8h8a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1z" />
               </svg>
             </div>
-            <span className="text-white font-bold text-lg tracking-tight">VideoFlow</span>
+            <span className="text-white font-bold text-lg tracking-tight">Limas CRM</span>
           </div>
         </div>
 
@@ -81,7 +81,7 @@ export default function LoginPage() {
 
         {/* Rodapé */}
         <div className="relative z-10">
-          <p className="text-slate-600 text-xs">© 2025 VideoFlow. Todos os direitos reservados.</p>
+          <p className="text-slate-600 text-xs">© 2025 Limas CRM. Todos os direitos reservados.</p>
         </div>
       </div>
 
@@ -95,7 +95,7 @@ export default function LoginPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.894L15 14M4 8h8a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1z" />
               </svg>
             </div>
-            <span className="font-bold text-slate-900">VideoFlow</span>
+            <span className="font-bold text-slate-900">Limas CRM</span>
           </div>
 
           <div className="mb-8">
