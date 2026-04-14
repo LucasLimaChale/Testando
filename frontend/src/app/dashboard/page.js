@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
@@ -14,6 +14,154 @@ const COLUMNS = [
   { id: 'PUBLICADO',           label: 'Finalizados',        color: '#10B981', bg: '#ECFDF5', border: '#A7F3D0' },
 ];
 
+// ── Afazeres (localStorage) ──────────────────────────────────
+// Estrutura: { id, clientName, task, notes, done, images:[{url,name}], uploadToken }
+function useTodos() {
+  const [todos, setTodos]           = useState([]);
+  const [open, setOpen]             = useState(false);
+  const [clientName, setClientName] = useState('');
+  const [task, setTask]             = useState('');
+  const [uploadingId, setUploadingId] = useState(null);
+  const [creatingLinkId, setCreatingLinkId] = useState(null);
+  const [copiedId, setCopiedId]     = useState(null);
+  const [editingLinkId, setEditingLinkId] = useState(null);
+  const [linkDraft, setLinkDraft]   = useState('');
+  const [showUrlConfig, setShowUrlConfig] = useState(false);
+  const [clientBaseUrl, setClientBaseUrlState] = useState('');
+  const clientRef  = useRef(null);
+  const fileInputRef   = useRef(null);
+  const uploadTargetRef = useRef(null);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('vf_todos') || '[]');
+      setTodos(saved);
+    } catch {}
+    const savedUrl = localStorage.getItem('vf_client_url') || '';
+    setClientBaseUrlState(savedUrl);
+  }, []);
+
+  function getBaseUrl() {
+    const saved = localStorage.getItem('vf_client_url');
+    if (saved?.trim()) return saved.trim().replace(/\/$/, '');
+    return typeof window !== 'undefined' ? window.location.origin : '';
+  }
+
+  function saveClientBaseUrl(url) {
+    const clean = url.trim().replace(/\/$/, '');
+    setClientBaseUrlState(clean);
+    localStorage.setItem('vf_client_url', clean);
+  }
+
+  function save(list) {
+    setTodos(list);
+    localStorage.setItem('vf_todos', JSON.stringify(list));
+  }
+
+  function add() {
+    if (!clientName.trim() && !task.trim()) return;
+    save([
+      { id: Date.now(), clientName: clientName.trim(), task: task.trim(), notes: '', done: false, images: [], uploadToken: null },
+      ...todos,
+    ]);
+    setClientName('');
+    setTask('');
+    clientRef.current?.focus();
+  }
+
+  function toggle(id) {
+    save(todos.map(t => t.id === id ? { ...t, done: !t.done } : t));
+  }
+
+  function remove(id) {
+    save(todos.filter(t => t.id !== id));
+  }
+
+  function clearDone() {
+    save(todos.filter(t => !t.done));
+  }
+
+  function removeImage(todoId, imgUrl) {
+    save(todos.map(t => t.id === todoId
+      ? { ...t, images: (t.images || []).filter(i => i.url !== imgUrl) }
+      : t
+    ));
+  }
+
+  function triggerImageUpload(todoId) {
+    uploadTargetRef.current = todoId;
+    fileInputRef.current?.click();
+  }
+
+  async function handleFileChange(e) {
+    const file = e.target.files?.[0];
+    if (!file || !uploadTargetRef.current) return;
+    e.target.value = '';
+    const todoId = uploadTargetRef.current;
+    setUploadingId(todoId);
+    try {
+      const { url, name } = await api.uploadTodoImage(file);
+      save(todos.map(t => t.id === todoId
+        ? { ...t, images: [...(t.images || []), { url, name }] }
+        : t
+      ));
+    } catch (err) {
+      alert('Erro ao enviar imagem: ' + err.message);
+    } finally {
+      setUploadingId(null);
+      uploadTargetRef.current = null;
+    }
+  }
+
+  function updateNotes(todoId, notes) {
+    save(todos.map(t => t.id === todoId ? { ...t, notes } : t));
+  }
+
+  async function generateLink(todoId) {
+    const t = todos.find(x => x.id === todoId);
+    if (!t) return;
+    setCreatingLinkId(todoId);
+    try {
+      const label = [t.clientName, t.task].filter(Boolean).join(' — ');
+      const req = await api.createUploadRequest(label || 'Envio de imagens');
+      const token = req.token;
+      const url = `${getBaseUrl()}/enviar/${token}`;
+      save(todos.map(x => x.id === todoId ? { ...x, uploadToken: token } : x));
+      setLinkDraft(url);
+      setEditingLinkId(todoId);
+    } catch (err) {
+      alert('Erro ao gerar link: ' + err.message);
+    } finally {
+      setCreatingLinkId(null);
+    }
+  }
+
+  function openLinkEditor(todoId, token) {
+    const url = `${getBaseUrl()}/enviar/${token}`;
+    setLinkDraft(url);
+    setEditingLinkId(todoId);
+  }
+
+  function copyLinkDraft(todoId) {
+    navigator.clipboard.writeText(linkDraft);
+    setCopiedId(todoId);
+    setTimeout(() => setCopiedId(null), 2000);
+  }
+
+  return {
+    todos, open, setOpen,
+    clientName, setClientName,
+    task, setTask,
+    clientRef, fileInputRef, uploadingId, creatingLinkId, copiedId,
+    editingLinkId, linkDraft, setLinkDraft,
+    showUrlConfig, setShowUrlConfig,
+    clientBaseUrl, setClientBaseUrlState, saveClientBaseUrl,
+    add, toggle, remove, clearDone,
+    updateNotes, removeImage, triggerImageUpload, handleFileChange,
+    generateLink, openLinkEditor, copyLinkDraft,
+  };
+}
+
 export default function DashboardPage() {
   const [user, setUser] = useState(null);
   const [videos, setVideos] = useState([]);
@@ -22,6 +170,7 @@ export default function DashboardPage() {
   const [dragCard, setDragCard] = useState(null);
   const [dragOverCol, setDragOverCol] = useState(null);
   const router = useRouter();
+  const todo = useTodos();
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -129,6 +278,264 @@ export default function DashboardPage() {
             </Link>
           )}
         </div>
+
+        {/* Afazeres removido — agora em /admin/afazeres */}
+        {false && (
+          <>
+            <button
+              onClick={() => todo.setOpen(o => !o)}
+              className="fixed bottom-6 right-6 z-40 flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm px-4 py-3 rounded-2xl shadow-lg transition-all"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
+              Afazeres
+              {todo.todos.filter(t => !t.done).length > 0 && (
+                <span className="bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center leading-none">
+                  {todo.todos.filter(t => !t.done).length}
+                </span>
+              )}
+            </button>
+
+            {/* Input oculto para upload de imagem */}
+            <input
+              ref={todo.fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={todo.handleFileChange}
+            />
+
+            {/* Painel Afazeres */}
+            {todo.open && (
+              <div className="fixed bottom-20 right-6 z-40 bg-white rounded-2xl shadow-2xl border border-slate-100 flex flex-col overflow-hidden" style={{ maxHeight: '80vh', width: '26rem' }}>
+
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-800 text-sm">Afazeres</span>
+                    {todo.todos.filter(t => !t.done).length > 0 && (
+                      <span className="bg-indigo-100 text-indigo-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                        {todo.todos.filter(t => !t.done).length} pendente{todo.todos.filter(t => !t.done).length > 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {todo.todos.some(t => t.done) && (
+                      <button onClick={todo.clearDone} className="text-xs text-slate-400 hover:text-red-500 transition-colors">Limpar feitos</button>
+                    )}
+                    {/* Botão config URL */}
+                    <button
+                      onClick={() => todo.setShowUrlConfig(v => !v)}
+                      title="Configurar URL dos links"
+                      className={`transition-colors ${todo.showUrlConfig ? 'text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    </button>
+                    <button onClick={() => todo.setOpen(false)} className="text-slate-400 hover:text-slate-600">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Config URL base dos links */}
+                {todo.showUrlConfig && (
+                  <div className="px-4 py-3 border-b border-slate-100 bg-amber-50 shrink-0">
+                    <p className="text-xs font-semibold text-amber-700 mb-1.5">URL base dos links para clientes</p>
+                    <div className="flex gap-2">
+                      <input
+                        value={todo.clientBaseUrl}
+                        onChange={e => todo.setClientBaseUrlState(e.target.value)}
+                        placeholder="http://limasmidiascrm.com.br"
+                        className="flex-1 text-xs border border-amber-200 rounded-xl px-3 py-2 bg-white outline-none focus:ring-2 focus:ring-amber-300"
+                      />
+                      <button
+                        onClick={() => { todo.saveClientBaseUrl(todo.clientBaseUrl); todo.setShowUrlConfig(false); }}
+                        className="bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors whitespace-nowrap"
+                      >
+                        Salvar
+                      </button>
+                    </div>
+                    <p className="text-xs text-amber-600 mt-1">Exemplo: <span className="font-mono">http://limasmidiascrm.com.br</span></p>
+                  </div>
+                )}
+
+                {/* Formulário novo afazer */}
+                <div className="px-4 py-3 border-b border-slate-100 shrink-0 space-y-2">
+                  <input
+                    ref={todo.clientRef}
+                    value={todo.clientName}
+                    onChange={e => todo.setClientName(e.target.value)}
+                    className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400"
+                    placeholder="Nome do cliente"
+                  />
+                  <div className="flex gap-2">
+                    <input
+                      value={todo.task}
+                      onChange={e => todo.setTask(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && todo.add()}
+                      className="flex-1 text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400"
+                      placeholder="O que precisa fazer? (Enter)"
+                    />
+                    <button
+                      onClick={todo.add}
+                      disabled={!todo.clientName.trim() && !todo.task.trim()}
+                      className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white rounded-xl px-3 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Lista de afazeres */}
+                <div className="overflow-y-auto flex-1">
+                  {todo.todos.length === 0 && (
+                    <p className="text-xs text-slate-400 text-center py-8">Nenhum afazer ainda.</p>
+                  )}
+                  {todo.todos.map(t => (
+                    <div key={t.id} className={`px-4 py-3 border-b border-slate-50 transition-colors ${t.done ? 'opacity-50 bg-slate-50' : 'hover:bg-slate-50'}`}>
+
+                      {/* Linha principal: checkbox + info + delete */}
+                      <div className="flex items-start gap-2.5">
+                        <button onClick={() => todo.toggle(t.id)} className="mt-0.5 shrink-0">
+                          <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${t.done ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 hover:border-indigo-400'}`}>
+                            {t.done && (
+                              <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </div>
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          {t.clientName && (
+                            <p className={`text-xs font-semibold uppercase tracking-wide mb-0.5 ${t.done ? 'text-slate-400' : 'text-indigo-600'}`}>{t.clientName}</p>
+                          )}
+                          {t.task && (
+                            <p className={`text-sm leading-snug ${t.done ? 'line-through text-slate-400' : 'text-slate-700'}`}>{t.task}</p>
+                          )}
+                        </div>
+                        <button onClick={() => todo.remove(t.id)} className="text-slate-200 hover:text-red-500 transition-colors shrink-0 mt-0.5">
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+
+                      {!t.done && (
+                        <div className="ml-6 mt-2.5 space-y-2">
+
+                          {/* Observações do admin */}
+                          <div>
+                            <span className="text-xs font-medium text-slate-500 block mb-1">Minhas observações</span>
+                            <textarea
+                              value={t.notes || ''}
+                              onChange={e => todo.updateNotes(t.id, e.target.value)}
+                              placeholder="Anotações, referências, detalhes..."
+                              rows={2}
+                              className="w-full text-xs border border-slate-200 rounded-xl px-2.5 py-2 bg-slate-50 outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 resize-none"
+                            />
+                          </div>
+
+                          {/* Minhas imagens (para usar no FB Ads) */}
+                          <div className="pt-1 border-t border-slate-100">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-xs font-medium text-slate-500">Minhas imagens</span>
+                              <button
+                                onClick={() => todo.triggerImageUpload(t.id)}
+                                disabled={todo.uploadingId === t.id}
+                                className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors disabled:opacity-40"
+                              >
+                                {todo.uploadingId === t.id ? (
+                                  <><div className="w-3 h-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" /> Enviando...</>
+                                ) : (
+                                  <><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg> Adicionar</>
+                                )}
+                              </button>
+                            </div>
+                            {(t.images || []).length > 0 ? (
+                              <div className="flex flex-wrap gap-1.5">
+                                {(t.images || []).map((img, idx) => (
+                                  <div key={idx} className="relative group/img">
+                                    <a href={img.url} target="_blank" rel="noreferrer">
+                                      <img src={img.url} alt={img.name} className="w-14 h-14 object-cover rounded-lg border border-slate-100 hover:opacity-80 transition-opacity" />
+                                    </a>
+                                    <button
+                                      onClick={() => todo.removeImage(t.id, img.url)}
+                                      className="absolute -top-1 -right-1 opacity-0 group-hover/img:opacity-100 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center transition-opacity"
+                                    >
+                                      <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-slate-300 italic">Nenhuma imagem adicionada</p>
+                            )}
+                          </div>
+
+                          {/* Link para cliente enviar imagem */}
+                          <div className="pt-2 border-t border-slate-100">
+                            <span className="text-xs font-medium text-slate-500 block mb-1.5">Link para o cliente enviar imagens</span>
+                            {t.uploadToken ? (
+                              todo.editingLinkId === t.id ? (
+                                /* Campo editável — troque localhost pelo IP antes de copiar */
+                                <div className="space-y-1.5">
+                                  <p className="text-xs text-amber-600 font-medium">Troque "localhost" pelo seu IP se for enviar fora da rede local:</p>
+                                  <input
+                                    value={todo.linkDraft}
+                                    onChange={e => todo.setLinkDraft(e.target.value)}
+                                    className="w-full text-xs border border-indigo-300 rounded-xl px-2.5 py-2 bg-indigo-50 outline-none focus:ring-2 focus:ring-indigo-300"
+                                  />
+                                  <button
+                                    onClick={() => todo.copyLinkDraft(t.id)}
+                                    className={`w-full flex items-center justify-center gap-1.5 text-xs font-semibold py-2 rounded-xl transition-colors ${todo.copiedId === t.id ? 'bg-emerald-500 text-white' : 'bg-indigo-600 hover:bg-indigo-700 text-white'}`}
+                                  >
+                                    {todo.copiedId === t.id ? (
+                                      <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg> Copiado!</>
+                                    ) : (
+                                      <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg> Copiar link</>
+                                    )}
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => todo.openLinkEditor(t.id, t.uploadToken)}
+                                  className="w-full flex items-center gap-2 text-xs font-medium px-3 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition-colors"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                                  Ver / copiar link do cliente
+                                </button>
+                              )
+                            ) : (
+                              <button
+                                onClick={() => todo.generateLink(t.id)}
+                                disabled={todo.creatingLinkId === t.id}
+                                className="w-full flex items-center gap-2 text-xs font-medium px-3 py-2 rounded-xl bg-slate-100 hover:bg-indigo-50 text-slate-500 hover:text-indigo-700 transition-colors disabled:opacity-40"
+                              >
+                                {todo.creatingLinkId === t.id ? (
+                                  <><div className="w-3 h-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" /> Gerando...</>
+                                ) : (
+                                  <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg> Gerar link para cliente</>
+                                )}
+                              </button>
+                            )}
+                          </div>
+
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
 
         {/* Kanban Board */}
         {loading ? (

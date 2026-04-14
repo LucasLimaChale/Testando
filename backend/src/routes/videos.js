@@ -145,8 +145,8 @@ router.post('/', authenticate, authorize('admin', 'editor'), async (req, res) =>
 
   try {
     const { rows } = await pool.query(`
-      INSERT INTO videos (colaborador_id, editor_id, titulo, url, storage_path, status, versao)
-      VALUES ($1, $2, $3, $4, $5, $6, 1)
+      INSERT INTO videos (colaborador_id, editor_id, titulo, url, storage_path, status, versao, upload_em)
+      VALUES ($1, $2, $3, $4, $5, $6, 1, NOW())
       RETURNING *
     `, [colId, req.user.id, titulo, url || null, storage_path || null, initialStatus]);
     res.status(201).json(rows[0]);
@@ -190,7 +190,7 @@ router.patch('/:id/approve', authenticate, async (req, res) => {
     }
 
     const { rows } = await pool.query(
-      "UPDATE videos SET status = 'APROVADO' WHERE id = $1 RETURNING *",
+      "UPDATE videos SET status = 'APROVADO', aprovado_em = NOW() WHERE id = $1 RETURNING *",
       [req.params.id]
     );
 
@@ -230,7 +230,7 @@ router.patch('/:id/reject', authenticate, async (req, res) => {
     try {
       await client.query('BEGIN');
       const { rows } = await client.query(
-        "UPDATE videos SET status = 'REPROVADO' WHERE id = $1 RETURNING *",
+        "UPDATE videos SET status = 'REPROVADO', reprovado_em = NOW() WHERE id = $1 RETURNING *",
         [req.params.id]
       );
       await client.query(

@@ -10,6 +10,9 @@ const clientRoutes   = require('./routes/clients');
 const empresaRoutes  = require('./routes/empresas');
 const statsRoutes    = require('./routes/stats');
 const webhookRoutes  = require('./routes/webhooks');
+const metaRoutes     = require('./routes/meta');
+const uploadRoutes   = require('./routes/uploads');
+const demandasRoutes = require('./routes/demandas');
 const { startCleanupJob } = require('./jobs/cleanup');
 
 const app = express();
@@ -36,6 +39,9 @@ app.use('/clients',  clientRoutes);
 app.use('/empresas', empresaRoutes);
 app.use('/stats',    statsRoutes);
 app.use('/webhook',  webhookRoutes);
+app.use('/meta',     metaRoutes);
+app.use('/uploads',  uploadRoutes);
+app.use('/demandas', demandasRoutes);
 
 app.use((_req, res) => res.status(404).json({ error: 'Rota não encontrada' }));
 

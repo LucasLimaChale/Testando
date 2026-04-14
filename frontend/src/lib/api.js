@@ -68,6 +68,28 @@ export const api = {
   // Stats (admin)
   getStats: () => request('/stats'),
 
+  // Meta Ads (admin)
+  metaGetConnections: () => request('/meta/connections'),
+  metaConnectBM: (business_id, access_token) =>
+    request('/meta/connections/bm', { method: 'POST', body: JSON.stringify({ business_id, access_token }) }),
+  metaConnect: (ad_account_id, access_token) =>
+    request('/meta/connections', { method: 'POST', body: JSON.stringify({ ad_account_id, access_token }) }),
+  metaDisconnect: (id) => request(`/meta/connections/${id}`, { method: 'DELETE' }),
+  metaDisconnectAll: () => request('/meta/connections', { method: 'DELETE' }),
+  metaMetrics: (account_id, since, until) => {
+    const qs = new URLSearchParams({ account_id, ...(since && { since }), ...(until && { until }) }).toString();
+    return request(`/meta/metrics?${qs}`);
+  },
+  metaGetAlerts: () => request('/meta/alerts'),
+  metaCreateAlert: (data) => request('/meta/alerts', { method: 'POST', body: JSON.stringify(data) }),
+  metaUpdateAlert: (id, data) => request(`/meta/alerts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  metaDeleteAlert: (id) => request(`/meta/alerts/${id}`, { method: 'DELETE' }),
+  metaGetReports: () => request('/meta/reports'),
+  metaCreateReport: (data) => request('/meta/reports', { method: 'POST', body: JSON.stringify(data) }),
+  metaUpdateReport: (id, data) => request(`/meta/reports/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  metaDeleteReport: (id) => request(`/meta/reports/${id}`, { method: 'DELETE' }),
+  metaSendReport: (id) => request(`/meta/reports/${id}/send`, { method: 'POST' }),
+
   // Videos
   getVideos: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
@@ -116,4 +138,40 @@ export const api = {
   createRevision: (id, data) =>
     request(`/videos/${id}/revision`, { method: 'POST', body: JSON.stringify(data) }),
   deleteVideo: (id) => request(`/videos/${id}`, { method: 'DELETE' }),
+
+  // Demandas (afazeres — corretores)
+  getDemandas: () => request('/demandas'),
+  updateDemandaStatus: (id, status) => request(`/demandas/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  deleteDemanda: (id) => request(`/demandas/${id}`, { method: 'DELETE' }),
+  getDemandaLinks: () => request('/demandas/links'),
+  createDemandaLink: (label) => request('/demandas/links', { method: 'POST', body: JSON.stringify({ label }) }),
+  deleteDemandaLink: (id) => request(`/demandas/links/${id}`, { method: 'DELETE' }),
+
+  // Upload Requests (links de envio para clientes)
+  getUploadRequests: () => request('/uploads'),
+  createUploadRequest: (label) => request('/uploads', { method: 'POST', body: JSON.stringify({ label }) }),
+  deleteUploadRequest: (id) => request(`/uploads/${id}`, { method: 'DELETE' }),
+  getUploadRequestFiles: (id) => request(`/uploads/${id}/files`),
+
+  // Tarefas pessoais
+  getTarefas: () => request('/demandas/tarefas'),
+  createTarefa: (titulo) => request('/demandas/tarefas', { method: 'POST', body: JSON.stringify({ titulo }) }),
+  toggleTarefa: (id, done) => request(`/demandas/tarefas/${id}`, { method: 'PATCH', body: JSON.stringify({ done }) }),
+  updateTarefaDescricao: (id, descricao) => request(`/demandas/tarefas/${id}`, { method: 'PATCH', body: JSON.stringify({ descricao }) }),
+  deleteTarefa: (id) => request(`/demandas/tarefas/${id}`, { method: 'DELETE' }),
+
+  // Upload de imagem para afazeres (autenticado)
+  uploadTodoImage: async (file) => {
+    const token = getToken();
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch(`${API_URL}/uploads/file`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: fd,
+    });
+    const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+  },
 };

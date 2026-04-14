@@ -183,8 +183,20 @@ export default function VideosPage() {
                           <span className={sm.cls}>{sm.label}</span>
                         </td>
                         <td className="px-5 py-3.5 text-slate-400 text-xs">v{v.versao}</td>
-                        <td className="px-5 py-3.5 text-slate-400 text-xs">
-                          {new Date(v.criado_em).toLocaleDateString('pt-BR')}
+                        <td className="px-5 py-3.5 text-slate-400 text-xs leading-relaxed">
+                          <div title="Upload">
+                            ⬆ {new Date(v.upload_em || v.criado_em).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}
+                          </div>
+                          {v.aprovado_em && (
+                            <div className="text-emerald-600" title="Aprovado em">
+                              ✓ {new Date(v.aprovado_em).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}
+                            </div>
+                          )}
+                          {v.reprovado_em && (
+                            <div className="text-red-500" title="Reprovado em">
+                              ✗ {new Date(v.reprovado_em).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}
+                            </div>
+                          )}
                         </td>
                         <td className="px-5 py-3.5 text-right">
                           <Link

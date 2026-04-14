@@ -289,8 +289,9 @@ export default function VideoPage() {
                 ['Editor',     video?.editor_nome || '—'],
                 ['Versão',     `v${video?.versao}`],
                 ['Status',     sm.label],
-                ['Criado em',  new Date(video?.criado_em).toLocaleDateString('pt-BR')],
-                ['Atualizado', new Date(video?.atualizado_em).toLocaleDateString('pt-BR')],
+                ['Upload',     video?.upload_em ? new Date(video.upload_em).toLocaleString('pt-BR') : new Date(video?.criado_em).toLocaleString('pt-BR')],
+                ['Aprovado em', video?.aprovado_em ? new Date(video.aprovado_em).toLocaleString('pt-BR') : null],
+                ['Reprovado em', video?.reprovado_em ? new Date(video.reprovado_em).toLocaleString('pt-BR') : null],
               ].map(([label, value]) => value ? (
                 <div key={label}>
                   <dt className="text-xs text-slate-400 uppercase tracking-wide font-medium">{label}</dt>
